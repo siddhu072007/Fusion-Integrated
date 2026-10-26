@@ -1,4 +1,3 @@
-import React from "react";
 import type { RouteObject } from "react-router-dom";
 import { ApplyLeavePage } from "./pages/ApplyLeavePage";
 import { MyLeavesPage } from "./pages/MyLeavesPage";

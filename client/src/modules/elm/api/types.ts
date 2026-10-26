@@ -2,6 +2,7 @@ export type LeaveType = "CL" | "RH" | "SCL" | "EL" | "COL" | "VL";
 
 export type LeaveStatus =
   | "DRAFT"
+  | "APPLICANT_ACTION"
   | "PENDING_SUBSTITUTE"
   | "PENDING_UNIT_HEAD"
   | "PENDING_AUTHORITY"
@@ -33,6 +34,11 @@ export interface LeaveBalance {
 }
 
 export interface LeaveRequest {
+  request_kind: "LEAVE" | "CANCEL" | "EXTEND" | "RESUME";
+  original_id?: string;
+  recommendation?: string;
+  actual_end_date?: string;
+  actual_duration_days?: string;
   id: string;
   applicant_user_id: string;
   leave_type: LeaveType;
@@ -61,7 +67,7 @@ export interface ApplyLeavePayload {
   leave_type: LeaveType;
   start_date: string;
   end_date: string;
-  duration_days: number;
+  duration_days?: number;
   reason: string;
   is_half_day?: boolean;
   half_day_session?: string;
@@ -70,4 +76,5 @@ export interface ApplyLeavePayload {
   out_of_station_from?: string;
   out_of_station_to?: string;
   substitute_id?: string;
+  evidence_reference?: string;
 }

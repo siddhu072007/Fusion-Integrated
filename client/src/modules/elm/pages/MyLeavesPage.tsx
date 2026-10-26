@@ -1,88 +1,72 @@
-import React from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../../../ui/components/PageHeader";
-import { StatusBadge } from "../../../ui/components/StatusBadge";
-import { useMyLeaves, withdrawLeaveRequest } from "../api/hooks";
+import { http, errorMessage } from "../../../lib/http";
+import { useMyLeaves, withdrawLeaveRequest, replaceSubstitute, followupLeave, exportLeave } from "../api/hooks";
+import type { LeaveRequest } from "../api/types";
+
+function LeaveActions({leave, done}: {leave: LeaveRequest; done: ()=>unknown}) {
+  const [action, setAction] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = ["PENDING_SUBSTITUTE","APPLICANT_ACTION","PENDING_UNIT_HEAD","PENDING_AUTHORITY"].includes(leave.status);
+  const today = new Date().toLocaleDateString("en-CA");
+  const original = leave.request_kind === "LEAVE" && leave.status === "APPROVED" && !leave.actual_end_date;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true); setError("");
+    try {
+      const reason = String(data.get("reason") || "");
+      if (action === "withdraw") await withdrawLeaveRequest(leave.id, reason);
+      else if (action === "replace") await replaceSubstitute(leave.id, String(data.get("substitute")));
+      else await followupLeave(leave.id, action, {reason, end_date: String(data.get("end") || "") || undefined,
+        substitute_id: String(data.get("substitute") || "") || undefined});
+      setAction(""); await done();
+    } catch (err) {setError(errorMessage(err));}
+    finally {setBusy(false);}
+  }
+  async function download() {
+    setError("");
+    try {await exportLeave(leave.id);} catch (err) {setError(errorMessage(err));}
+  }
+  return <div>
+    <button onClick={download}>Download / print</button>{" "}
+    {pending && <button onClick={()=>setAction("withdraw")}>Withdraw</button>}{" "}
+    {leave.status === "APPLICANT_ACTION" && <button onClick={()=>setAction("replace")}>Replace substitute</button>}{" "}
+    {original && today < leave.start_date && <button onClick={()=>setAction("cancel")}>Request cancellation</button>}{" "}
+    {original && ["EL","COL","VL"].includes(leave.leave_type) && today >= leave.start_date && <>
+      <button onClick={()=>setAction("extend")}>Request extension</button>{" "}<button onClick={()=>setAction("resume")}>Submit resumption</button>
+    </>}
+    {error && <p role="alert">{error}</p>}
+    {action && <form onSubmit={submit} style={{marginTop:12,display:"grid",gap:8}}>
+      <strong>{action === "replace" ? "Nominate replacement" : action}</strong>
+      {action !== "replace" && <label>Reason / details <textarea name="reason" required /></label>}
+      {["replace","extend"].includes(action) && <label>Substitute employee ID <input name="substitute" inputMode="numeric" pattern="[1-9][0-9]*" required={action === "replace"} /></label>}
+      {["extend","resume"].includes(action) && <label>{action === "resume" ? "Actual resumption date" : "Requested new end date"} <input type="date" name="end" required /></label>}
+      <div><button disabled={busy} type="submit">{busy ? "Saving…" : "Confirm"}</button>{" "}<button type="button" disabled={busy} onClick={()=>setAction("")}>Close</button></div>
+    </form>}
+  </div>;
+}
 
 export function MyLeavesPage() {
-  const { leaves, loading, error, refetch } = useMyLeaves();
-
-  const handleWithdraw = async (id: string) => {
-    if (window.confirm("Are you sure you want to withdraw this leave request?")) {
-      await withdrawLeaveRequest(id, "Withdrawn by employee");
-      refetch();
-    }
-  };
-
-  return (
-    <div style={{ padding: "1.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <PageHeader title="My Leave Applications" subtitle="Track status of your submitted leave requests" />
-        <Link
-          to="/elm/apply"
-          style={{
-            backgroundColor: "#2563eb",
-            color: "#fff",
-            padding: "0.5rem 1rem",
-            borderRadius: 6,
-            textDecoration: "none",
-            fontWeight: 600,
-          }}
-        >
-          + New Leave
-        </Link>
-      </div>
-
-      {loading && <p>Loading leave records...</p>}
-      {error && <p style={{ color: "#dc2626" }}>{error}</p>}
-
-      {!loading && leaves.length === 0 && (
-        <div style={{ textAlign: "center", padding: "3rem", background: "#f8fafc", borderRadius: 8 }}>
-          <p style={{ color: "#64748b" }}>No leave requests found. Click "New Leave" to submit an application.</p>
-        </div>
-      )}
-
-      {!loading && leaves.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 8, overflow: "hidden", border: "1px solid #e2e8f0" }}>
-          <thead>
-            <tr style={{ background: "#f1f5f9", textAlign: "left", fontSize: 13, color: "#475569" }}>
-              <th style={{ padding: 12 }}>Category</th>
-              <th style={{ padding: 12 }}>Dates</th>
-              <th style={{ padding: 12 }}>Days</th>
-              <th style={{ padding: 12 }}>Station Leave</th>
-              <th style={{ padding: 12 }}>Substitute</th>
-              <th style={{ padding: 12 }}>Status</th>
-              <th style={{ padding: 12 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leaves.map((l) => (
-              <tr key={l.id} style={{ borderTop: "1px solid #e2e8f0", fontSize: 14 }}>
-                <td style={{ padding: 12, fontWeight: 600 }}>{l.leave_type}</td>
-                <td style={{ padding: 12 }}>{l.start_date} to {l.end_date}</td>
-                <td style={{ padding: 12 }}>{l.duration_days}</td>
-                <td style={{ padding: 12 }}>{l.station_leave ? "Yes" : "No"}</td>
-                <td style={{ padding: 12 }}>
-                  {l.substitute_user_id ? `${l.substitute_user_id} (${l.substitute_status})` : "None"}
-                </td>
-                <td style={{ padding: 12 }}>
-                  <StatusBadge status={l.status} />
-                </td>
-                <td style={{ padding: 12 }}>
-                  {["PENDING_SUBSTITUTE", "PENDING_UNIT_HEAD", "PENDING_AUTHORITY"].includes(l.status) && (
-                    <button
-                      onClick={() => handleWithdraw(l.id)}
-                      style={{ color: "#ef4444", background: "transparent", border: "1px solid #fca5a5", borderRadius: 4, padding: "4px 8px", cursor: "pointer" }}
-                    >
-                      Withdraw
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
+  const {leaves, loading, error, refetch} = useMyLeaves();
+  const [notifications, setNotifications] = useState<{id:string;message:string}[]>([]);
+  const [noticeError, setNoticeError] = useState("");
+  useEffect(()=> { http.get("/elm/notifications/").then(r=>setNotifications(r.data)).catch(e=>setNoticeError(errorMessage(e))); }, [leaves]);
+  return <section><PageHeader title="My leave applications" subtitle="Status, decisions and follow-up requests" action={<Link to="/elm/apply">New application</Link>} />
+    {error && <p role="alert">{error}</p>}{loading && <p>Loading…</p>}
+    {!loading && !leaves.length && <p>No applications yet.</p>}
+    {leaves.map(l=><article key={l.id} style={{border:"1px solid #ddd",padding:16,marginBottom:16}}>
+      <h3>{l.leave_type} · {l.request_kind} · {l.status.replaceAll("_"," ")}</h3>
+      <p>{l.start_date} to {l.end_date} · {l.duration_days} days</p><p>{l.reason}</p>
+      {l.original_id && <p>Original application: {l.original_id}</p>}
+      {l.actual_end_date && <p>Reviewed actual end: {l.actual_end_date} · {l.actual_duration_days} days</p>}
+      {l.substitute_user_id && <p>Substitute: {l.substitute_user_id} · {l.substitute_status}</p>}
+      {l.rejection_reason && <p>Decision reason: {l.rejection_reason}</p>}
+      <LeaveActions leave={l} done={refetch} />
+      <details><summary>Request history</summary><ol>{l.action_logs?.map(a=><li key={a.id}>{new Date(a.created_at).toLocaleString()}: {a.action} · {a.remarks}</li>)}</ol></details>
+    </article>)}
+    <details><summary>Notifications</summary>{noticeError && <p role="alert">{noticeError}</p>}<ul>{notifications.map(n=><li key={n.id}>{n.message}</li>)}</ul></details>
+  </section>;
 }

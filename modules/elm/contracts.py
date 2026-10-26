@@ -1,12 +1,26 @@
-"""Contract boundary for the ELM module (ADR-0013: No cross-module Foreign Keys)."""
-from decimal import Decimal
-from typing import Dict, Any
+"""The batched public contract for attendance/payroll integrations."""
 
-def get_employee_leave_summary(user_id: str) -> Dict[str, Any]:
-    """Public read API exposed to other modules (e.g. Payroll / Attendance)."""
-    from .selectors.leave_selectors import get_user_balances
-    balances = get_user_balances(user_id)
-    return {
-        "user_id": user_id,
-        "balances": {b.leave_type: float(b.balance) for b in balances},
-    }
+from collections.abc import Sequence
+
+from django.utils import timezone
+
+from modules.elm.models import AttendanceEvent, LeaveBalance
+
+
+def get_employee_leave_summaries(user_ids: Sequence[int], year=None):
+    year = year or timezone.localdate().year
+    ids = list(map(str, user_ids))
+    result = {user_id: {} for user_id in ids}
+    for balance in LeaveBalance.objects.filter(user_id__in=ids, year=year):
+        result[balance.user_id][balance.leave_type] = str(balance.balance)
+    return result
+
+
+def get_attendance_events(event_ids: Sequence[str]):
+    return list(AttendanceEvent.objects.filter(pk__in=event_ids).values())
+
+
+def acknowledge_attendance_events(event_ids):
+    return AttendanceEvent.objects.filter(pk__in=event_ids, delivered_at__isnull=True).update(
+        delivered_at=timezone.now()
+    )

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { http } from "../../../lib/http";
+import { saveBlob } from "../../../lib/download";
+import { http, errorMessage, readBlobError } from "../../../lib/http";
 import type { LeaveRequest, LeaveBalance, ApplyLeavePayload } from "./types";
 
 export function useMyLeaves() {
@@ -10,11 +11,11 @@ export function useMyLeaves() {
   const fetchLeaves = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await http.get<LeaveRequest[]>("/api/v1/elm/leaves/");
+      const res = await http.get<LeaveRequest[]>("/elm/leaves/");
       setLeaves(res.data);
       setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err: unknown) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -35,11 +36,11 @@ export function useLeaveBalances() {
   const fetchBalances = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await http.get<LeaveBalance[]>("/api/v1/elm/balances/");
+      const res = await http.get<LeaveBalance[]>("/elm/balances/");
       setBalances(res.data);
       setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err: unknown) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -60,11 +61,11 @@ export function useSubstituteQueue() {
   const fetchQueue = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await http.get<LeaveRequest[]>("/api/v1/elm/substitute-queue/");
+      const res = await http.get<LeaveRequest[]>("/elm/substitute-queue/");
       setRequests(res.data);
       setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err: unknown) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -85,11 +86,11 @@ export function useApprovalsQueue() {
   const fetchQueue = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await http.get<LeaveRequest[]>("/api/v1/elm/approvals/");
+      const res = await http.get<LeaveRequest[]>("/elm/approvals/");
       setRequests(res.data);
       setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err: unknown) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -103,17 +104,17 @@ export function useApprovalsQueue() {
 }
 
 export async function submitLeave(payload: ApplyLeavePayload): Promise<LeaveRequest> {
-  const res = await http.post<LeaveRequest>("/api/v1/elm/leaves/", payload);
+  const res = await http.post<LeaveRequest>("/elm/leaves/", payload);
   return res.data;
 }
 
 export async function decideSubstitute(leaveId: string, accept: boolean, remarks: string = ""): Promise<LeaveRequest> {
-  const res = await http.post<LeaveRequest>(`/api/v1/elm/substitute-queue/${leaveId}/decision/`, { accept, remarks });
+  const res = await http.post<LeaveRequest>(`/elm/substitute-queue/${leaveId}/decision/`, { accept, remarks });
   return res.data;
 }
 
 export async function decideApproval(leaveId: string, approve: boolean, remarks: string = "", forwardHigher: boolean = false): Promise<LeaveRequest> {
-  const res = await http.post<LeaveRequest>(`/api/v1/elm/approvals/${leaveId}/decision/`, {
+  const res = await http.post<LeaveRequest>(`/elm/approvals/${leaveId}/decision/`, {
     approve,
     remarks,
     forward_higher: forwardHigher,
@@ -122,6 +123,19 @@ export async function decideApproval(leaveId: string, approve: boolean, remarks:
 }
 
 export async function withdrawLeaveRequest(leaveId: string, reason: string = ""): Promise<LeaveRequest> {
-  const res = await http.post<LeaveRequest>(`/api/v1/elm/leaves/${leaveId}/withdraw/`, { reason });
+  const res = await http.post<LeaveRequest>(`/elm/leaves/${leaveId}/withdraw/`, { reason });
   return res.data;
+}
+
+export async function followupLeave(id: string, kind: string, data: {reason: string; end_date?: string; substitute_id?: string}) {
+  return (await http.post<LeaveRequest>(`/elm/leaves/${id}/${kind}/`, data)).data;
+}
+export async function replaceSubstitute(id: string, substitute_id: string) {
+  return (await http.post<LeaveRequest>(`/elm/leaves/${id}/replace-substitute/`, {substitute_id})).data;
+}
+export async function exportLeave(id: string) {
+  try {
+    const response = await http.get(`/elm/leaves/${id}/export/`, { responseType: "blob" });
+    saveBlob(response.data, `leave-${id}.html`);
+  } catch (error) { throw await readBlobError(error); }
 }

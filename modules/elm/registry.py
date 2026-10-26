@@ -72,11 +72,13 @@ _EMPLOYEE = [
     "elm.leave.substitute",
 ]
 
-_UNIT_HEAD = _EMPLOYEE + [
+_UNIT_HEAD = [
+    *_EMPLOYEE,
     "elm.leave.approve",
 ]
 
-_ADMIN = _UNIT_HEAD + [
+_ADMIN = [
+    *_UNIT_HEAD,
     "elm.leave.admin",
 ]
 
@@ -84,6 +86,8 @@ ROLE_GRANTS = {
     "faculty": _EMPLOYEE,
     "staff": _EMPLOYEE,
     "unit_head": _UNIT_HEAD,
+    "establishment": _UNIT_HEAD,
+    "deputy_registrar": _UNIT_HEAD,
     "dean": _UNIT_HEAD,
     "registrar": _UNIT_HEAD,
     "director": _UNIT_HEAD,

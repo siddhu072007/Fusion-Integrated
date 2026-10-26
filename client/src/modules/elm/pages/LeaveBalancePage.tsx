@@ -1,4 +1,3 @@
-import React from "react";
 import { PageHeader } from "../../../ui/components/PageHeader";
 import { useLeaveBalances } from "../api/hooks";
 
